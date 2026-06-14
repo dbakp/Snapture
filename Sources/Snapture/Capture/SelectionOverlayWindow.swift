@@ -21,7 +21,7 @@ final class SelectionOverlayWindow {
         self.onSelect = onSelect
         self.onCancel = onCancel
 
-        self.window = NSWindow(
+        self.window = OverlayWindow(
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -47,7 +47,9 @@ final class SelectionOverlayWindow {
     }
 
     func present() {
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         window.makeFirstResponder(view)
         NSCursor.crosshair.push()
     }

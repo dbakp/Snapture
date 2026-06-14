@@ -170,6 +170,7 @@ final class EditorState: ObservableObject {
         self.padding = CGFloat(preferences.defaultPadding)
         self.cornerRadius = CGFloat(preferences.defaultCornerRadius)
         self.shadowEnabled = preferences.defaultShadowEnabled
+        self.frameStyle = FrameStyle(rawValue: preferences.defaultFrameStyle) ?? .none
         if let preset = BackgroundPresets.all.first(where: { "gradient.\($0.id)" == preferences.defaultBackground }) {
             self.background = preset.style
         } else {

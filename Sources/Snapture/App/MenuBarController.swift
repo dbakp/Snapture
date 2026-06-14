@@ -41,13 +41,13 @@ final class MenuBarController {
             )
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "Snapture — ⌘⇧2 area, ⌘⇧1 window"
+            button.toolTip = "Snapture — ⌘⇧2 area, ⌘⇧1 window, ⌃⌘3 full screen"
         }
 
         let menu = NSMenu()
         menu.addItem(makeItem(title: "Capture Area", shortcut: "2", modifiers: [.command, .shift], action: #selector(captureArea)))
         menu.addItem(makeItem(title: "Capture Window", shortcut: "1", modifiers: [.command, .shift], action: #selector(captureWindow)))
-        menu.addItem(makeItem(title: "Capture Full Screen", shortcut: "", modifiers: [], action: #selector(captureFullScreen)))
+        menu.addItem(makeItem(title: "Capture Full Screen", shortcut: "3", modifiers: [.command, .control], action: #selector(captureFullScreen)))
         menu.addItem(makeItem(title: "Capture Area in 3 Seconds", shortcut: "", modifiers: [], action: #selector(captureAreaDelayed)))
         menu.addItem(.separator())
         menu.addItem(makeItem(title: "Preferences…", shortcut: ",", modifiers: [.command], action: #selector(openPreferences)))

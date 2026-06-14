@@ -6,11 +6,13 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private let state: EditorState
     private let window: NSWindow
     private let onClose: (EditorWindowController) -> Void
+    private let autoCopyOnOpen: Bool
 
     init(image: NSImage, onClose: @escaping (EditorWindowController) -> Void) {
         let prefs = (NSApp.delegate as? AppDelegate)?.preferences ?? Preferences()
         self.state = EditorState(image: image, preferences: prefs)
         self.onClose = onClose
+        self.autoCopyOnOpen = prefs.autoCopyOnCapture
 
         let imageSize = image.size
         let initialWidth: CGFloat = max(980, min(imageSize.width + 480, 1500))
@@ -47,6 +49,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     func showWindow() {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+
+        // "Auto-copy on capture": put the composed image on the clipboard the
+        // moment the editor opens, so a paste works even with zero edits.
+        if autoCopyOnOpen {
+            Exporter.copyToClipboard(ImageComposer.compose(state: state))
+        }
     }
 
     nonisolated func windowWillClose(_ notification: Notification) {

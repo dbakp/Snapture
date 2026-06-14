@@ -43,6 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         hotKey.register(keyCode: UInt32(kVK_ANSI_1), modifiers: [.command, .shift]) { [weak self] in
             self?.captureWindow()
         }
+        // ⌃⌘3 for full screen: ⌘⇧3 is reserved by the macOS system screenshot,
+        // so a Carbon hotkey there would register but never fire.
+        hotKey.register(keyCode: UInt32(kVK_ANSI_3), modifiers: [.control, .command]) { [weak self] in
+            self?.captureFullScreen()
+        }
 
         if !OnboardingWindowController.hasCompleted {
             OnboardingWindowController.shared.show()
@@ -57,22 +62,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func captureArea() {
         Task { @MainActor in
             guard let image = await CaptureService.shared.captureArea() else { return }
-            windows.openEditor(with: image)
+            didCapture(image)
         }
     }
 
     private func captureWindow() {
         Task { @MainActor in
             guard let image = await CaptureService.shared.captureWindow() else { return }
-            windows.openEditor(with: image)
+            didCapture(image)
         }
     }
 
     private func captureFullScreen() {
         Task { @MainActor in
             guard let image = await CaptureService.shared.captureFullScreen() else { return }
-            windows.openEditor(with: image)
+            didCapture(image)
         }
+    }
+
+    /// Shared post-capture handling: optional shutter sound, then open the editor.
+    private func didCapture(_ image: NSImage) {
+        if preferences.playSoundOnCapture { CaptureSound.play() }
+        windows.openEditor(with: image)
     }
 
     private func captureAreaAfterDelay(seconds: UInt64) {
@@ -86,3 +97,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 // Carbon virtual key codes, redeclared so we don't pull in Carbon.h symbols implicitly.
 private let kVK_ANSI_1: Int = 0x12
 private let kVK_ANSI_2: Int = 0x13
+private let kVK_ANSI_3: Int = 0x14
+
+/// Plays the system screenshot shutter sound, best-effort. The authentic sound
+/// ships inside CoreAudio; if it's ever absent we fall back to a stock alert
+/// sound, and worst case stay silent rather than crash.
+@MainActor
+enum CaptureSound {
+    private static let cached: NSSound? = {
+        let candidates = [
+            "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
+            "/System/Library/Sounds/Grab.aif"
+        ]
+        for path in candidates where FileManager.default.fileExists(atPath: path) {
+            if let sound = NSSound(contentsOfFile: path, byReference: true) { return sound }
+        }
+        return NSSound(named: "Pop")
+    }()
+
+    static func play() {
+        guard let sound = cached else { return }
+        if sound.isPlaying { sound.stop() }
+        sound.play()
+    }
+}
