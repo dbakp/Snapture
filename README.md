@@ -8,8 +8,9 @@ Built with Swift 6, SwiftUI, ScreenCaptureKit, Vision. macOS 14+.
 
 **Capture**
 - `⌘⇧2` — area capture with crosshair + live dimensions (multi-display)
-- `⌘⇧1` — window capture: hover highlights the window under the cursor (with its title), click to capture
-- Full screen and 3-second delayed capture from the menu bar
+- `⌘⇧1` — window capture: hover shows a **live thumbnail of the actual window** (captured through the same filter as the real shot, so it's accurate even when the window is hidden behind others), labelled with its app + title; click to capture
+- `⌃⌘3` — full screen capture (⌘⇧3 is reserved by macOS for its own screenshot)
+- 3-second delayed capture from the menu bar
 - Menu bar app (camera viewfinder icon), no dock presence
 
 **Compose**
@@ -44,8 +45,10 @@ Built with Swift 6, SwiftUI, ScreenCaptureKit, Vision. macOS 14+.
 - **Copy Text (OCR)** — Vision-based text recognition of the screenshot, copied as plain text
 
 **App**
-- Launch at login (Preferences)
 - Per-capture editor windows (open several at once)
+- **Preferences** (menu bar → Preferences, `⌘,`) — two tabs:
+  - *Capture*: auto-copy to clipboard on capture, shutter sound, include the mouse cursor, launch at login
+  - *Appearance*: default background, default window frame, drop shadow, padding, corner radius
 
 ## Build & run
 
@@ -60,8 +63,23 @@ swift test             # 15-test logic suite
 
 ## Distribution
 
-`./build.sh dmg` produces `Snapture-<version>.dmg` containing the app, an
-/Applications alias, and install instructions ("READ ME FIRST.txt").
+`./build.sh dmg` produces a polished `Snapture-<version>.dmg`: the app on a
+pedestal, an arrow pointing to an /Applications alias, install instructions
+("Read Me - First Launch.txt"), and a branded background.
+
+The fancy window layout is written straight into the DMG's `.DS_Store` (via the
+`ds_store` + `mac_alias` Python packages) rather than by scripting Finder —
+install them once:
+
+```bash
+python3 -m pip install --user ds_store mac_alias
+```
+
+If they're missing, `build.sh` falls back to a plain (background-less) DMG and
+prints the install command. Note: macOS **26.2+ (Tahoe)** regressed Finder so
+that a background-image *bookmark* (`pBBk`) record makes the background render
+blank; `Scripts/dmg_layout.py` deliberately omits it (see the script header and
+[dmgbuild #273](https://github.com/dmgbuild/dmgbuild/issues/273)).
 
 The app is **ad-hoc signed, not notarized**. People who download the DMG will
 hit Gatekeeper once: on macOS 15+ they must open the app once, then approve it
