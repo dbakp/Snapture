@@ -34,9 +34,12 @@ final class CaptureService {
 
     func captureFullScreen() async -> NSImage? {
         guard ensureScreenRecordingPermission() else { return nil }
-        guard let display = await primaryDisplay() else { return nil }
-        let rect = CGRect(x: 0, y: 0, width: CGFloat(display.width), height: CGFloat(display.height))
-        return await captureRect(rect, displayID: display.displayID)
+        // The display the cursor is on — not always the primary.
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+                ?? NSScreen.main else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: screen.frame.width, height: screen.frame.height)
+        return await captureRect(rect, displayID: screen.displayID)
     }
 
     func captureWindow() async -> NSImage? {
@@ -261,10 +264,6 @@ final class CaptureService {
         isCapturing = true
         defer { isCapturing = false }
 
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else {
-            return nil
-        }
-
         return await withCheckedContinuation { (continuation: CheckedContinuation<Selection?, Never>) in
             var didResume = false
             let resume: (Selection?) -> Void = { [weak self] selection in
@@ -274,11 +273,14 @@ final class CaptureService {
                 continuation.resume(returning: selection)
             }
 
+            // One overlay per physical screen — keyed by the screen's own display
+            // ID. The capture step resolves the SCDisplay from that ID, so we no
+            // longer skip a screen just because SCShareableContent didn't list a
+            // matching display (which silently dropped secondary monitors).
             var overlays: [SelectionOverlayWindow] = []
             for screen in NSScreen.screens {
-                guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else { continue }
-                let overlay = SelectionOverlayWindow(screen: screen, display: display) { rect, display in
-                    resume(Selection(rect: rect, displayID: display.displayID))
+                let overlay = SelectionOverlayWindow(screen: screen, displayID: screen.displayID) { rect, displayID in
+                    resume(Selection(rect: rect, displayID: displayID))
                 } onCancel: {
                     resume(nil)
                 }
@@ -297,15 +299,13 @@ final class CaptureService {
 
     // MARK: - Screenshot
 
-    private func primaryDisplay() async -> SCDisplay? {
-        let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        return content?.displays.first
-    }
-
     private func captureRect(_ rect: CGRect, displayID: CGDirectDisplayID) async -> NSImage? {
-        guard let display = try? await SCShareableContent
-                .excludingDesktopWindows(false, onScreenWindowsOnly: true)
-                .displays.first(where: { $0.displayID == displayID }) else { return nil }
+        guard let displays = try? await SCShareableContent
+                .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays,
+              let display = Self.resolveDisplay(id: displayID, in: displays) else {
+            NSLog("Snapture: could not resolve SCDisplay for id \(displayID)")
+            return nil
+        }
 
         let config = SCStreamConfiguration()
         let scale = Self.backingScale(for: display)
@@ -333,6 +333,16 @@ final class CaptureService {
     private static func backingScale(for display: SCDisplay) -> CGFloat {
         let screen = NSScreen.screens.first { $0.displayID == display.displayID }
         return screen?.backingScaleFactor ?? 2.0
+    }
+
+    /// Find the SCDisplay for a display ID. Falls back to matching by global
+    /// bounds when the ID from NSScreen doesn't line up with SCDisplay.displayID.
+    private static func resolveDisplay(id: CGDirectDisplayID, in displays: [SCDisplay]) -> SCDisplay? {
+        if let d = displays.first(where: { $0.displayID == id }) { return d }
+        let bounds = CGDisplayBounds(id)
+        guard !bounds.isEmpty else { return nil }
+        return displays.first { $0.frame == bounds }
+            ?? displays.first { abs($0.frame.width - bounds.width) < 2 && abs($0.frame.height - bounds.height) < 2 }
     }
 
     /// Whether the user wants the mouse cursor baked into captures. Read from the

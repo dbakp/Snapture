@@ -43,9 +43,11 @@ final class WindowPickOverlay {
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
-            defer: false,
-            screen: screen
+            defer: false
         )
+        // Global-coordinate placement; passing `screen:` would double-offset
+        // overlays on secondary displays. See SelectionOverlayWindow.
+        window.setFrame(screen.frame, display: false)
         view = WindowPickView(
             frame: NSRect(origin: .zero, size: screen.frame.size),
             candidates: candidates,

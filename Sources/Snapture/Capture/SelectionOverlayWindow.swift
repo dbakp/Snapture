@@ -6,18 +6,18 @@ final class SelectionOverlayWindow {
     private let window: NSWindow
     private let view: SelectionOverlayView
     private let screen: NSScreen
-    private let display: SCDisplay
-    private let onSelect: (CGRect, SCDisplay) -> Void
+    private let displayID: CGDirectDisplayID
+    private let onSelect: (CGRect, CGDirectDisplayID) -> Void
     private let onCancel: () -> Void
 
     init(
         screen: NSScreen,
-        display: SCDisplay,
-        onSelect: @escaping (CGRect, SCDisplay) -> Void,
+        displayID: CGDirectDisplayID,
+        onSelect: @escaping (CGRect, CGDirectDisplayID) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.screen = screen
-        self.display = display
+        self.displayID = displayID
         self.onSelect = onSelect
         self.onCancel = onCancel
 
@@ -25,9 +25,13 @@ final class SelectionOverlayWindow {
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
-            defer: false,
-            screen: screen
+            defer: false
         )
+        // Position explicitly in GLOBAL screen coordinates. Passing `screen:` to
+        // the initializer interprets contentRect relative to that screen's own
+        // origin, which double-offsets overlays onto nonexistent space for any
+        // non-primary display (so they never appear). setFrame is unambiguous.
+        window.setFrame(screen.frame, display: false)
         self.view = SelectionOverlayView(frame: NSRect(origin: .zero, size: screen.frame.size))
         window.contentView = view
         window.isOpaque = false
@@ -41,7 +45,7 @@ final class SelectionOverlayWindow {
         view.onCommit = { [weak self] localRect in
             guard let self else { return }
             let displayRect = self.toDisplayPointsRect(localRect: localRect)
-            self.onSelect(displayRect, self.display)
+            self.onSelect(displayRect, self.displayID)
         }
         view.onCancel = { [weak self] in self?.onCancel() }
     }
