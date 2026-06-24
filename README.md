@@ -1,123 +1,136 @@
 # Snapture
 
-A native macOS screenshot app for product managers. Capture an area or a window, drop it into a polished editor, copy the result to clipboard in one keystroke.
+**Beautiful screenshots for product people.** Capture an area, window, or full screen, drop it into a polished editor, and copy the finished image to your clipboard in one keystroke — no saving, no uploading.
 
-Built with Swift 6, SwiftUI, ScreenCaptureKit, Vision. macOS 14+.
+![Platform](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
+![Release](https://img.shields.io/github/v/release/dbakp/Snapture)
+![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+
+Snapture lives in your menu bar. Hit a hotkey, select what you want, annotate it, and paste it straight into Slack, Figma, a PR, or a doc. Everything stays on your Mac — it never touches the network.
+
+---
+
+## Download
+
+**[⬇︎ Download the latest release](https://github.com/dbakp/Snapture/releases/latest)** — open the `.dmg` and drag Snapture into Applications.
+
+Requires **macOS 14 or later** · Apple silicon & Intel.
+
+### First launch (one-time)
+
+Snapture is signed but **not notarized by Apple**, so Gatekeeper warns you the first time:
+
+- **macOS 15 / 26 (Sequoia / Tahoe):** try to open Snapture once, then go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.
+- **Older macOS:** right-click Snapture → **Open** → **Open**.
+
+You only do this once. On first capture, macOS asks for **Screen Recording** permission (System Settings → Privacy & Security → Screen Recording → enable Snapture) — required for any screenshot tool.
+
+---
 
 ## Features
 
-**Capture**
-- `⌘⇧2` — area capture with crosshair + live dimensions (multi-display)
-- `⌘⇧1` — window capture: hover shows a **live thumbnail of the actual window** (captured through the same filter as the real shot, so it's accurate even when the window is hidden behind others), labelled with its app + title; click to capture
-- `⌃⌘3` — full screen capture (⌘⇧3 is reserved by macOS for its own screenshot)
+### Capture
+- **`⌘⇧2`** — area capture with a crosshair and live dimensions, on any monitor
+- **`⌘⇧1`** — window capture with a **live thumbnail of the real window** under your cursor (accurate even when it's hidden behind others), labelled with its app and title
+- **`⌃⌘3`** — full screen (the display under your cursor)
 - 3-second delayed capture from the menu bar
-- Menu bar app (camera viewfinder icon), no dock presence
+- Fully multi-monitor aware
 
-**Compose**
-- Background presets (gradients + solids) and custom solid color
-- **Window chrome framing**: wrap the screenshot in a macOS titlebar or browser chrome (traffic lights + URL bar) for product-shot mockups
-- Adjustable padding, corner radius, screenshot drop-shadow (radius + opacity)
+### Compose
+- Background presets (gradients + solids) or a custom color
+- **Window-chrome framing** — wrap the shot in a macOS titlebar or browser chrome (traffic lights + URL bar) for clean product mockups
+- Adjustable padding, corner radius, and drop shadow
 
-**Annotate**
-- Tools: Select (V) · Crop (C) · Rectangle (R) · Ellipse (O) · Triangle (Y) · Line (L) · Arrow (A) · Pen (P) · Text (T) · Step badge (N) · Magnifier (M) · Blur (B) · Highlight (H)
-- **Step badges**: numbered circles that auto-increment — annotate flows 1, 2, 3…
-- **Pen**: freehand drawing that moves and scales with its frame
-- **Magnifier**: circular loupe that zooms the screenshot under it (1.2×–8×, ring color/width)
-- **Blur regions**: gaussian *or* pixelate (mosaic) for redaction
-- Highlight: dims everything except punched-out spotlight rects (multiple highlights never stack-dim)
-- Per-layer drop shadow (rectangle / ellipse / triangle / image / text / badge / magnifier)
-- Arrows & lines: endpoint handles, drag either end, the other pins; full 360° direction
-- Click any layer from any tool to grab it; corner handles resize; ⇧ locks image aspect
-- Double-click text to edit inline; Enter/Escape/click-outside commits
+### Annotate
+- Rectangle, ellipse, triangle, line, **arrow** (full 360° with endpoint handles), **pen**, **text**, **step badges** (auto-incrementing 1·2·3…), **magnifier** loupe (1.2×–8×), **blur / pixelate** for redaction, and **highlight** spotlights
+- Per-layer drop shadows; click any layer to grab, move, and resize it; ⇧ locks aspect on images
+- Double-click text to edit inline
 
-**Layers**
-- `⌘V` pastes any clipboard image as a new layer
-- Z-order: `⌘]` forward · `⌘[` backward · `⌘⇧A` front · `⌘⇧B` back
-- `⌫` deletes the selected layer
+### Export
+- **`⌘C`** copy the composed image to the clipboard — pixel-identical to what you see
+- **`⌘S`** save as PNG
+- **Drag-out chip** — drag the result straight into another app without saving
+- **Copy Text (OCR)** — pull the text out of a screenshot
 
-**Undo / redo**
-- `⌘Z` / `⌘⇧Z` (or `⌘Y`), depth 80, slider drags collapse to one step
+### App
+- Menu-bar app (no Dock clutter) that surfaces in the Dock and ⌘-Tab only while you have an editor open
+- Multiple editor windows at once, undo/redo, launch-at-login
+- Preferences for capture behavior (auto-copy, shutter sound, cursor) and default look
 
-**Export**
-- `⌘C` copy composed PNG to clipboard
-- `⌘S` save as PNG
-- **Drag chip** — drag the composed image straight into Slack / Figma / Finder without saving
-- **Copy Text (OCR)** — Vision-based text recognition of the screenshot, copied as plain text
+---
 
-**App**
-- Per-capture editor windows (open several at once)
-- **Preferences** (menu bar → Preferences, `⌘,`) — two tabs:
-  - *Capture*: auto-copy to clipboard on capture, shutter sound, include the mouse cursor, launch at login
-  - *Appearance*: default background, default window frame, drop shadow, padding, corner radius
+## Keyboard shortcuts
 
-## Build & run
+| | |
+|---|---|
+| Capture area / window / full screen | `⌘⇧2` · `⌘⇧1` · `⌃⌘3` |
+| Tools | Select `V` · Crop `C` · Rectangle `R` · Ellipse `O` · Triangle `Y` · Line `L` · Arrow `A` · Pen `P` · Text `T` · Step badge `N` · Magnifier `M` · Blur `B` · Highlight `H` |
+| Paste image as layer | `⌘V` |
+| Z-order | forward `⌘]` · backward `⌘[` · front `⌘⇧A` · back `⌘⇧B` |
+| Delete layer | `⌫` |
+| Undo / redo | `⌘Z` / `⌘⇧Z` |
+| Copy / save | `⌘C` / `⌘S` |
+| Preferences | `⌘,` |
+
+---
+
+## Privacy
+
+Snapture never connects to the internet. Your screenshots never leave your Mac. The only system permission it requests is **Screen Recording**, which macOS requires for any app that captures the screen.
+
+---
+
+## Building from source
 
 ```bash
-./build.sh             # debug build
-./build.sh release     # optimized
+git clone https://github.com/dbakp/Snapture.git
+cd Snapture
+./build.sh             # debug build → .build/Snapture.app
+./build.sh release     # optimized build
 ./build.sh dmg         # release + distributable Snapture-<version>.dmg
-
+swift test             # logic test suite (19 tests)
 open .build/Snapture.app
-swift test             # 15-test logic suite
 ```
 
-## Distribution
+Built with **Swift 6, SwiftUI, ScreenCaptureKit, and Vision**. No third-party Swift dependencies.
 
-`./build.sh dmg` produces a polished `Snapture-<version>.dmg`: the app on a
-pedestal, an arrow pointing to an /Applications alias, install instructions
-("Read Me - First Launch.txt"), and a branded background.
+<details>
+<summary>Packaging the DMG</summary>
 
-The fancy window layout is written straight into the DMG's `.DS_Store` (via the
-`ds_store` + `mac_alias` Python packages) rather than by scripting Finder —
-install them once:
+`./build.sh dmg` builds the branded installer (app on a pedestal, arrow pointing to an /Applications alias). The window layout is written directly into the DMG's `.DS_Store` via two pure-Python packages — install them once:
 
 ```bash
 python3 -m pip install --user ds_store mac_alias
 ```
 
-If they're missing, `build.sh` falls back to a plain (background-less) DMG and
-prints the install command. Note: macOS **26.2+ (Tahoe)** regressed Finder so
-that a background-image *bookmark* (`pBBk`) record makes the background render
-blank; `Scripts/dmg_layout.py` deliberately omits it (see the script header and
-[dmgbuild #273](https://github.com/dmgbuild/dmgbuild/issues/273)).
+Without them, the build falls back to a plain DMG (no custom background) and prints the install command.
 
-The app is **ad-hoc signed, not notarized**. People who download the DMG will
-hit Gatekeeper once: on macOS 15+ they must open the app once, then approve it
-under System Settings → Privacy & Security → "Open Anyway"; on older macOS,
-right-click → Open → Open. The bundled READ ME explains this. The signature
-uses a stable identifier-based designated requirement, so the Screen Recording
-permission survives app updates. To remove the Gatekeeper friction entirely,
-sign with a Developer ID certificate and notarize (see Roadmap).
+> **macOS 26.2+ note:** Tahoe's Finder regressed so that a background-image *bookmark* (`pBBk`) record makes the DMG background render blank. `Scripts/dmg_layout.py` deliberately omits it — see [dmgbuild #273](https://github.com/dmgbuild/dmgbuild/issues/273).
 
-### First-launch permission
+The app is ad-hoc signed with a stable identifier-based designated requirement, so the Screen Recording permission survives updates. Add a Developer ID certificate + notarization to remove the Gatekeeper prompt entirely.
+</details>
 
-The first capture prompts for **Screen Recording** permission:
-
-> System Settings → Privacy & Security → Screen Recording → enable **Snapture**
-
-Then re-launch (`pkill Snapture && open .build/Snapture.app`).
-
-Note: ⌘⇧1 / ⌘⇧2 are global hotkeys. Window capture excludes Snapture's own windows from the picker. Launch-at-login works best when the app is moved to /Applications.
-
-## Project layout
+<details>
+<summary>Project layout</summary>
 
 ```
 Sources/Snapture/
-├── App/                          # @main, menu bar, hotkeys, preferences
-├── Capture/                      # ScreenCaptureKit: area, window pick overlays
-├── Editor/                       # editor window, canvas, sidebar, state, annotations
-└── Export/                       # composer (ImageRenderer), clipboard/PNG, OCR lives in EditorView
+├── App/        # @main, menu bar, global hotkeys, preferences, window management
+├── Capture/    # ScreenCaptureKit: area + window-pick overlays (multi-display)
+├── Editor/     # editor window, canvas, sidebar, state, annotations
+└── Export/     # composer (ImageRenderer), clipboard / PNG
 ```
 
-The same `CompositionView` powers the live editor preview and the exported image — pixel parity guaranteed. Arrows/lines store direction as signed frame sizes; see the `arrowTail`/`arrowTip` accessors in [Annotation.swift](Sources/Snapture/Editor/Annotation.swift) before touching that geometry.
+The same `CompositionView` powers both the live editor and the exported image, so a copy is pixel-identical to what you see. Annotations are stored in a scale-independent coordinate space; arrows/lines encode direction as signed frame sizes (see the `arrowTail` / `arrowTip` accessors in [Annotation.swift](Sources/Snapture/Editor/Annotation.swift) before touching that geometry).
+</details>
 
-## Roadmap (not yet built)
+---
+
+## Roadmap
 
 - Screen recording → MP4 / GIF
 - Scrolling capture
-- Capture history browser (recent screenshots in the menu)
-- Pin screenshot as floating always-on-top window
-- Cloud upload + shareable links
-- Configurable hotkeys UI
-- Social-size canvas presets (16:9, 4:3, X/Twitter card)
-- Notarized .dmg distribution
+- Capture-history browser in the menu
+- Pin a screenshot as a floating always-on-top window
+- Configurable hotkeys
+- Notarized distribution
