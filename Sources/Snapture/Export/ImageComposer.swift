@@ -16,7 +16,8 @@ enum ImageComposer {
             canvasSize: canvasSize,
             imageRect: CGRect(x: padding, y: padding + chromeH, width: imageSize.width, height: imageSize.height),
             viewSize: canvasSize,
-            canvasOrigin: .zero
+            canvasOrigin: .zero,
+            displayScale: 1.0
         )
 
         let view = CompositionView(state: state, layout: layout)

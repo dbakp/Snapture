@@ -2,14 +2,27 @@ import SwiftUI
 import AppKit
 
 struct CanvasLayout: Equatable {
-    let canvasSize: CGSize       // outer "page" size (image + padding)
-    let imageRect: CGRect        // screenshot rect within canvas, origin top-left
+    // All geometry below is in NATIVE canvas points (1 unit = 1 image point),
+    // independent of how the editor scales the canvas to fit its window. The
+    // editor applies `displayScale` as a render transform; the export uses
+    // displayScale = 1. Because annotations are authored and stored in this
+    // native space, the live preview and the exported image are pixel-identical.
+    let canvasSize: CGSize       // outer "page" size (image + padding), native
+    let imageRect: CGRect        // screenshot rect within canvas, native, origin top-left
     let viewSize: CGSize         // size of the visible editor area
-    let canvasOrigin: CGPoint    // top-left of canvas within view (for centering)
+    let canvasOrigin: CGPoint    // top-left of the scaled canvas within the view
+    let displayScale: CGFloat    // editor fit-scale; 1.0 for export
 
-    /// Map a point in view coordinates → canvas coordinates.
+    /// View point → native canvas point.
     func toCanvas(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: point.x - canvasOrigin.x, y: point.y - canvasOrigin.y)
+        CGPoint(x: (point.x - canvasOrigin.x) / displayScale,
+                y: (point.y - canvasOrigin.y) / displayScale)
+    }
+
+    /// Native canvas point → view point.
+    func toView(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x * displayScale + canvasOrigin.x,
+                y: point.y * displayScale + canvasOrigin.y)
     }
 }
 
@@ -39,21 +52,34 @@ struct EditorCanvas: View {
             let layout = computeLayout(in: geo.size)
             ZStack(alignment: .topLeading) {
                 Color.clear
+                // Rendered at native size, then scaled to fit. The export renders
+                // the same view at displayScale = 1 → pixel-identical output.
                 CompositionView(state: state, layout: layout, hiddenAnnotationID: editingTextID)
                     .equatable()
                     .frame(width: layout.canvasSize.width, height: layout.canvasSize.height)
+                    .scaleEffect(layout.displayScale)
+                    .frame(width: layout.canvasSize.width * layout.displayScale,
+                           height: layout.canvasSize.height * layout.displayScale)
                     .offset(x: layout.canvasOrigin.x, y: layout.canvasOrigin.y)
                     .allowsHitTesting(false)
 
                 if let selected = state.selectedAnnotation {
-                    SelectionHandlesView(annotation: selected, canvasOffset: layout.canvasOrigin)
+                    SelectionHandlesView(annotation: selected, layout: layout)
                         .allowsHitTesting(false)
                 }
 
                 if let crop = state.pendingCrop {
-                    CropOverlayView(imageRect: layout.imageRect.offsetBy(dx: layout.canvasOrigin.x, dy: layout.canvasOrigin.y),
-                                    cropRect: crop.offsetBy(dx: layout.imageRect.minX + layout.canvasOrigin.x,
-                                                            dy: layout.imageRect.minY + layout.canvasOrigin.y))
+                    // pendingCrop is in native image-local points; map to view space.
+                    let s = layout.displayScale
+                    let imgOrigin = layout.toView(layout.imageRect.origin)
+                    let cropOrigin = layout.toView(CGPoint(x: layout.imageRect.minX + crop.minX,
+                                                           y: layout.imageRect.minY + crop.minY))
+                    CropOverlayView(
+                        imageRect: CGRect(x: imgOrigin.x, y: imgOrigin.y,
+                                          width: layout.imageRect.width * s,
+                                          height: layout.imageRect.height * s),
+                        cropRect: CGRect(x: cropOrigin.x, y: cropOrigin.y,
+                                         width: crop.width * s, height: crop.height * s))
                         .allowsHitTesting(false)
                 }
 
@@ -96,24 +122,25 @@ struct EditorCanvas: View {
         let canvasW = image.width + padding * 2
         let canvasH = image.height + chromeH + padding * 2
 
-        let scale = min(
+        let displayScale = min(
             (viewSize.width  - 40) / canvasW,
             (viewSize.height - 40) / canvasH,
             1.0
         )
-        let displayedCanvasW = canvasW * scale
-        let displayedCanvasH = canvasH * scale
-        let imageRect = CGRect(x: padding * scale, y: (padding + chromeH) * scale,
-                               width: image.width * scale, height: image.height * scale)
+        // Native (unscaled) geometry — the canvas is shrunk for display via a
+        // render transform, not by baking the scale into the coordinates.
+        let imageRect = CGRect(x: padding, y: padding + chromeH,
+                               width: image.width, height: image.height)
 
         return CanvasLayout(
-            canvasSize: CGSize(width: displayedCanvasW, height: displayedCanvasH),
+            canvasSize: CGSize(width: canvasW, height: canvasH),
             imageRect: imageRect,
             viewSize: viewSize,
             canvasOrigin: CGPoint(
-                x: (viewSize.width  - displayedCanvasW) / 2,
-                y: (viewSize.height - displayedCanvasH) / 2
-            )
+                x: (viewSize.width  - canvasW * displayScale) / 2,
+                y: (viewSize.height - canvasH * displayScale) / 2
+            ),
+            displayScale: displayScale
         )
     }
 
@@ -190,13 +217,15 @@ struct EditorCanvas: View {
                 ann.frame = resize(initialAnnotationFrame, handle: handle, to: canvasPoint, aspectLock: aspect)
             }
         case .cropDraw:
+            // rect is in native canvas points → native image-local points,
+            // which is exactly the space EditorState.applyCrop expects.
             let inImage = CGRect(
                 x: rect.minX - layout.imageRect.minX,
                 y: rect.minY - layout.imageRect.minY,
                 width: rect.width, height: rect.height
             )
-            let clamped = inImage.intersection(CGRect(origin: .zero, size: state.croppedImage.size).applying(.init(scaleX: scaleForImage(layout), y: scaleForImage(layout))))
-            state.pendingCrop = clamped
+            state.pendingCrop = inImage.intersection(
+                CGRect(origin: .zero, size: state.croppedImage.size))
         }
     }
 
@@ -259,7 +288,7 @@ struct EditorCanvas: View {
 
     private func handleDoubleTap(at location: CGPoint, layout: CanvasLayout) {
         let canvasPoint = layout.toCanvas(location)
-        if let hit = hitTest(canvasPoint: canvasPoint), hit.kind == .text {
+        if let hit = hitTest(canvasPoint: canvasPoint, layout: layout), hit.kind == .text {
             state.selectedAnnotationID = hit.id
             startTextEditing(hit)
         }
@@ -268,6 +297,7 @@ struct EditorCanvas: View {
     private func startTextEditing(_ annotation: Annotation) {
         editingText = annotation.text
         editingTextID = annotation.id
+        state.isEditingText = true
     }
 
     /// Commit (or discard, if empty) the in-progress text edit.
@@ -285,14 +315,15 @@ struct EditorCanvas: View {
         }
         editingTextID = nil
         editingText = ""
+        state.isEditingText = false
     }
 
     private func beginDrag(at canvasPoint: CGPoint, layout: CanvasLayout) {
         // Smart click: clicking on an existing annotation selects/grabs it,
         // regardless of which tool is active (except crop, which is modal).
-        if state.tool != .crop, let hit = hitTest(canvasPoint: canvasPoint) {
+        if state.tool != .crop, let hit = hitTest(canvasPoint: canvasPoint, layout: layout) {
             state.selectedAnnotationID = hit.id
-            if let handle = hitTestHandle(canvasPoint: canvasPoint, annotation: hit) {
+            if let handle = hitTestHandle(canvasPoint: canvasPoint, annotation: hit, layout: layout) {
                 state.snapshot()    // before resize
                 dragKind = .resizeAnnotation(hit.id, handle)
             } else {
@@ -344,18 +375,23 @@ struct EditorCanvas: View {
 
     // MARK: - Hit testing
 
-    private func hitTest(canvasPoint: CGPoint) -> Annotation? {
+    private func hitTest(canvasPoint: CGPoint, layout: CanvasLayout) -> Annotation? {
+        // Tolerances are in native points; divide by displayScale so the grab
+        // area stays constant on screen even when the canvas is shrunk to fit.
+        let tol = 6 / layout.displayScale
+        let lineTol = 10 / layout.displayScale
         for ann in state.annotations.reversed() {
-            let frame = ann.frame.insetBy(dx: -6, dy: -6)
+            let frame = ann.frame.insetBy(dx: -tol, dy: -tol)
             if frame.contains(canvasPoint) { return ann }
             if ann.kind.isLinear {
-                if distanceToArrowLine(ann: ann, point: canvasPoint) < 10 { return ann }
+                if distanceToArrowLine(ann: ann, point: canvasPoint) < lineTol { return ann }
             }
         }
         return nil
     }
 
-    private func hitTestHandle(canvasPoint: CGPoint, annotation: Annotation) -> Handle? {
+    private func hitTestHandle(canvasPoint: CGPoint, annotation: Annotation, layout: CanvasLayout) -> Handle? {
+        let k = 1 / layout.displayScale   // keep handle hit areas constant on screen
         // Arrows use two endpoint handles (tail/tip), NOT corner handles.
         // frame.origin = tail (start), frame.origin + frame.size = tip (end).
         if annotation.kind.isLinear {
@@ -363,7 +399,7 @@ struct EditorCanvas: View {
             let end = annotation.arrowTip
 
             // 1) Direct hit on the visible 9pt endpoint dot, with generous forgiveness.
-            let handleRadius: CGFloat = 18
+            let handleRadius: CGFloat = 18 * k
             let dStart = hypot(start.x - canvasPoint.x, start.y - canvasPoint.y)
             let dEnd   = hypot(end.x   - canvasPoint.x, end.y   - canvasPoint.y)
             if dStart < handleRadius && dStart <= dEnd { return .arrowStart }
@@ -381,7 +417,7 @@ struct EditorCanvas: View {
                 let projX = start.x + t * dx
                 let projY = start.y + t * dy
                 let distToLine = hypot(canvasPoint.x - projX, canvasPoint.y - projY)
-                if distToLine < 10 {
+                if distToLine < 10 * k {
                     if t < 0.34 { return .arrowStart }
                     if t > 0.66 { return .arrowEnd }
                 }
@@ -397,7 +433,7 @@ struct EditorCanvas: View {
             (.bottomRight, CGPoint(x: frame.maxX, y: frame.maxY))
         ]
         for (h, p) in handles {
-            if hypot(p.x - canvasPoint.x, p.y - canvasPoint.y) < 12 { return h }
+            if hypot(p.x - canvasPoint.x, p.y - canvasPoint.y) < 12 * k { return h }
         }
         return nil
     }
@@ -459,10 +495,6 @@ struct EditorCanvas: View {
             }
         }
         return f
-    }
-
-    private func scaleForImage(_ layout: CanvasLayout) -> CGFloat {
-        layout.imageRect.width / state.croppedImage.size.width
     }
 
     /// Distance from `point` to the arrow's actual line segment (true tail → tip).
@@ -958,31 +990,29 @@ struct BlurRegionView: View {
 
 struct SelectionHandlesView: View {
     let annotation: Annotation
-    let canvasOffset: CGPoint
+    let layout: CanvasLayout
 
     var body: some View {
         if annotation.kind.isLinear {
-            // Two endpoint handles at the true tail/tip, in view coords.
-            let tail = CGPoint(
-                x: annotation.arrowTail.x + canvasOffset.x,
-                y: annotation.arrowTail.y + canvasOffset.y
-            )
-            let tip = CGPoint(
-                x: annotation.arrowTip.x + canvasOffset.x,
-                y: annotation.arrowTip.y + canvasOffset.y
-            )
+            // Two endpoint handles at the true tail/tip, mapped to view coords.
+            let tail = layout.toView(annotation.arrowTail)
+            let tip = layout.toView(annotation.arrowTip)
             ZStack {
                 handleDot(at: tail)
                 handleDot(at: tip)
             }
         } else {
-            let f = annotation.frame.standardized.offsetBy(dx: canvasOffset.x, dy: canvasOffset.y)
+            let f = annotation.frame.standardized
+            let tl = layout.toView(CGPoint(x: f.minX, y: f.minY))
+            let vr = CGRect(x: tl.x, y: tl.y,
+                            width: f.width * layout.displayScale,
+                            height: f.height * layout.displayScale)
             ZStack {
                 RoundedRectangle(cornerRadius: 2)
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .frame(width: f.width + 4, height: f.height + 4)
-                    .position(x: f.midX, y: f.midY)
-                ForEach(Array(corners(of: f).enumerated()), id: \.offset) { _, p in
+                    .frame(width: vr.width + 4, height: vr.height + 4)
+                    .position(x: vr.midX, y: vr.midY)
+                ForEach(Array(corners(of: vr).enumerated()), id: \.offset) { _, p in
                     handleDot(at: p)
                 }
             }
@@ -1045,7 +1075,7 @@ struct TextEditOverlay: View {
         // padding — no giant horizontal bar behind a single word.
         TextField("Text", text: $text)
             .focused($focused)
-            .font(.system(size: annotation.fontSize, weight: .semibold))
+            .font(.system(size: annotation.fontSize * layout.displayScale, weight: .semibold))
             .foregroundStyle(annotation.color.swiftUI)
             .textFieldStyle(.plain)
             .padding(.horizontal, 4)
@@ -1059,8 +1089,8 @@ struct TextEditOverlay: View {
                     )
             )
             .fixedSize(horizontal: true, vertical: false)
-            .offset(x: layout.canvasOrigin.x + annotation.frame.minX - 4,
-                    y: layout.canvasOrigin.y + annotation.frame.minY - 2)
+            .offset(x: layout.toView(annotation.frame.origin).x - 4,
+                    y: layout.toView(annotation.frame.origin).y - 2)
             .onAppear {
                 // Defer the focus request to the next runloop so the TextField
                 // is fully attached to its window before we ask for first-responder.

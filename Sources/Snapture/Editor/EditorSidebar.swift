@@ -129,9 +129,9 @@ struct AnnotationPropertiesPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Delete (⌫)")
-                // Active only while a layer is selected (this panel is only shown then),
-                // so the binding doesn't fight text-field backspace elsewhere.
-                .keyboardShortcut(.delete, modifiers: [])
+                // Suppressed while the text editor is focused so Backspace edits
+                // the text instead of deleting the annotation being typed into.
+                .keyShortcut(.delete, active: !state.isEditingText)
             }
 
             // Z-order controls — show when there's more than one layer

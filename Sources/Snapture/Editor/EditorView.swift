@@ -18,6 +18,7 @@ struct EditorView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(.regularMaterial)
+                .zIndex(1)   // let hover tooltips overflow above the canvas below
 
             Divider()
 
@@ -50,6 +51,10 @@ struct EditorView: View {
     }
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        // While typing in the inline text editor, let every key reach the field
+        // (including ⌘C/⌘V/⌘Z and Delete, which edit the text, not the canvas).
+        if state.isEditingText { return .ignored }
+
         if press.modifiers.contains(.command) {
             let shift = press.modifiers.contains(.shift)
             let ch = press.key.character
@@ -222,7 +227,8 @@ struct EditorToolbar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!state.canUndo)
-                .help("Undo (⌘Z)")
+                .accessibilityLabel("Undo")
+                .quickTooltip("Undo  (⌘Z)")
                 .keyboardShortcut("z", modifiers: .command)
 
                 Button(action: onRedo) {
@@ -231,7 +237,8 @@ struct EditorToolbar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!state.canRedo)
-                .help("Redo (⌘⇧Z)")
+                .accessibilityLabel("Redo")
+                .quickTooltip("Redo  (⌘⇧Z)")
                 .keyboardShortcut("z", modifiers: [.command, .shift])
 
                 Button(action: onPaste) {
@@ -239,7 +246,8 @@ struct EditorToolbar: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .help("Paste image as layer (⌘V)")
+                .accessibilityLabel("Paste image")
+                .quickTooltip("Paste image as layer  (⌘V)")
                 .keyboardShortcut("v", modifiers: .command)
 
                 Button(action: onCopyText) {
@@ -247,7 +255,8 @@ struct EditorToolbar: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .help("Copy text in screenshot (OCR)")
+                .accessibilityLabel("Copy text (OCR)")
+                .quickTooltip("Copy text in screenshot (OCR)")
             }
             .padding(4)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -270,18 +279,20 @@ struct EditorToolbar: View {
                 .padding(.vertical, 5)
                 .background(.quaternary, in: Capsule())
                 .onDrag { makeDragProvider() }
-                .help("Drag the composed image into another app")
+                .quickTooltip("Drag the composed image into another app")
 
             Button(action: onSave) {
                 Label("Save", systemImage: "square.and.arrow.down")
             }
             .buttonStyle(.bordered)
+            .quickTooltip("Save as PNG  (⌘S)")
             .keyboardShortcut("s", modifiers: .command)
 
             Button(action: onCopy) {
                 Label("Copy", systemImage: "doc.on.clipboard")
             }
             .buttonStyle(.borderedProminent)
+            .quickTooltip("Copy to clipboard  (⌘C)")
             .keyboardShortcut("c", modifiers: .command)
         }
     }
@@ -308,7 +319,62 @@ struct ToolButton: View {
                 .foregroundStyle(state.tool == tool ? .primary : .secondary)
         }
         .buttonStyle(.plain)
-        .help("\(tool.displayName) (\(String(tool.keyboardShortcut.character)))")
-        .keyboardShortcut(tool.keyboardShortcut, modifiers: [])
+        .accessibilityLabel(tool.displayName)
+        .quickTooltip("\(tool.displayName)  (\(String(tool.keyboardShortcut.character).uppercased()))")
+        // Suppressed while typing so e.g. "r"/"t" type into the text field
+        // instead of switching tools.
+        .keyShortcut(tool.keyboardShortcut, active: !state.isEditingText)
+    }
+}
+
+extension View {
+    /// Applies a no-modifier key equivalent only when `active`. Disabling it
+    /// while the inline text editor is focused keeps single-letter shortcuts
+    /// (tool keys, Delete) from stealing typed characters.
+    @ViewBuilder
+    func keyShortcut(_ key: KeyEquivalent, active: Bool) -> some View {
+        if active { keyboardShortcut(key, modifiers: []) } else { self }
+    }
+
+    /// A fast (~0.3s) hover tooltip — far quicker than the system `.help()`
+    /// delay — so toolbar icons are self-explanatory on hover.
+    func quickTooltip(_ text: String) -> some View {
+        modifier(QuickTooltip(text: text))
+    }
+}
+
+/// Lightweight hover tooltip shown just below a toolbar control.
+private struct QuickTooltip: ViewModifier {
+    let text: String
+    @State private var visible = false
+    @State private var pending: DispatchWorkItem?
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                pending?.cancel()
+                guard hovering else { visible = false; return }
+                let work = DispatchWorkItem { visible = true }
+                pending = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+            }
+            .overlay(alignment: .top) {
+                if visible {
+                    Text(text)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.12)))
+                        .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
+                        .fixedSize()
+                        .offset(y: 36)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                        .zIndex(1000)
+                }
+            }
+            .animation(.easeOut(duration: 0.1), value: visible)
     }
 }

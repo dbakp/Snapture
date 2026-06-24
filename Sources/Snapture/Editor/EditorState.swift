@@ -148,6 +148,10 @@ final class EditorState: ObservableObject {
 
     @Published var pendingCrop: CGRect?    // image-space rect being drawn
 
+    /// True while the inline text editor is focused. Single-key tool shortcuts
+    /// and the delete shortcut are suppressed so typed letters reach the field.
+    @Published var isEditingText = false
+
     /// Chrome bar height in image points for the current frame style.
     var chromeHeight: CGFloat { frameStyle.chromeHeight }
 

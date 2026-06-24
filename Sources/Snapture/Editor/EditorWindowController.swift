@@ -50,10 +50,14 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
 
-        // "Auto-copy on capture": put the composed image on the clipboard the
-        // moment the editor opens, so a paste works even with zero edits.
+        // "Auto-copy on capture": populate the clipboard with the composed image
+        // so a paste works with zero edits. Deferred to the next runloop tick so
+        // the full-resolution render never blocks the editor window from appearing.
         if autoCopyOnOpen {
-            Exporter.copyToClipboard(ImageComposer.compose(state: state))
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                Exporter.copyToClipboard(ImageComposer.compose(state: self.state))
+            }
         }
     }
 
