@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // If an editor (or other window) is already open, just bring it forward.
+        // Only the "no windows" reopen gesture starts a fresh area capture.
+        if flag { return true }
         captureArea()
         return false
     }
