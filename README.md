@@ -134,3 +134,7 @@ The same `CompositionView` powers both the live editor and the exported image, s
 - Pin a screenshot as a floating always-on-top window
 - Configurable hotkeys
 - Notarized distribution
+
+## License
+
+[MIT](LICENSE) © 2026 David Posada
