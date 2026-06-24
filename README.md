@@ -137,4 +137,4 @@ The same `CompositionView` powers both the live editor and the exported image, s
 
 ## License
 
-[MIT](LICENSE) © 2026 David Posada
+[MIT](LICENSE) © 2026 David Bak Posada
