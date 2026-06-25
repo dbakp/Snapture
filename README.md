@@ -95,7 +95,7 @@ cd Snapture
 ./build.sh             # debug build → .build/Snapture.app
 ./build.sh release     # optimized build
 ./build.sh dmg         # release + distributable Snapture-<version>.dmg
-swift test             # logic test suite (19 tests)
+swift test             # logic test suite (22 tests)
 open .build/Snapture.app
 ```
 
