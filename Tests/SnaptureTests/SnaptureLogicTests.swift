@@ -1,5 +1,7 @@
 import XCTest
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import Snapture
 
 @MainActor
@@ -302,6 +304,51 @@ final class SnaptureLogicTests: XCTestCase {
 
     /// Every annotation kind must compose without crashing and yield the right
     /// canvas dimensions (smoke test for the whole export path post-refactor).
+    // MARK: - GIF encoding
+
+    private func solidFrame(_ color: NSColor, at t: Double, size: Int = 24) -> GIFRecorder.Frame {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let ctx = NSGraphicsContext(bitmapImageRep: rep)!
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = ctx
+        color.setFill(); NSRect(x: 0, y: 0, width: size, height: size).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        return GIFRecorder.Frame(data: rep.representation(using: .png, properties: [:])!, time: t)
+    }
+
+    func testGIFEncoderProducesLoopingAnimatedGIF() {
+        let frames = [solidFrame(.red, at: 0), solidFrame(.green, at: 0.1), solidFrame(.blue, at: 0.2)]
+        guard let data = GIFEncoder.encode(frames: frames),
+              let src = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return XCTFail("encode produced no GIF")
+        }
+        XCTAssertEqual(CGImageSourceGetType(src) as String?, UTType.gif.identifier)
+        XCTAssertEqual(CGImageSourceGetCount(src), 3)
+
+        let props = CGImageSourceCopyProperties(src, nil) as? [CFString: Any]
+        let gif = props?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+        XCTAssertEqual(gif?[kCGImagePropertyGIFLoopCount] as? Int, 0)   // 0 = infinite
+    }
+
+    func testGIFEncoderEmptyReturnsNil() {
+        XCTAssertNil(GIFEncoder.encode(frames: []))
+    }
+
+    func testGIFQualityScalesWithSlider() {
+        let region = CGSize(width: 800, height: 600)
+        let lo = GIFQuality.pixelSize(regionPoints: region, quality: 0.0, retinaScale: 2)
+        let hi = GIFQuality.pixelSize(regionPoints: region, quality: 1.0, retinaScale: 2)
+        XCTAssertGreaterThan(hi.width, lo.width)                       // sharper = more pixels
+        XCTAssertGreaterThan(GIFQuality.fps(1.0), GIFQuality.fps(0.0)) // and higher fps
+        XCTAssertGreaterThan(
+            GIFQuality.estimatedRange(regionPoints: region, quality: 1.0, retinaScale: 2).high,
+            GIFQuality.estimatedRange(regionPoints: region, quality: 0.0, retinaScale: 2).high)
+        // Longest-edge cap holds even for a huge region at max quality.
+        let huge = GIFQuality.pixelSize(regionPoints: CGSize(width: 4000, height: 3000), quality: 1.0, retinaScale: 2)
+        XCTAssertLessThanOrEqual(max(huge.width, huge.height), GIFQuality.longestEdgeCap)
+    }
+
     func testComposeHandlesAllAnnotationKinds() {
         let state = makeState(imageWidth: 600, imageHeight: 400)
         var anns: [Annotation] = []

@@ -16,6 +16,13 @@ final class CaptureService {
     /// clobber the live session's state and orphan its full-screen overlay.
     private var isCapturing = false
 
+    // GIF recording state
+    private var isRecording = false
+    private var isPreparingRecording = false   // options panel shown, not yet recording
+    private var recorder: GIFRecorder?
+    private var recordingPanel: RecordingPanelController?
+    private var regionOutline: RegionOutlineWindow?
+
     // Per-pick-session preview state for the window picker.
     private var pickWindowsByID: [CGWindowID: SCWindow] = [:]
     private var previewCache: [CGWindowID: NSImage] = [:]
@@ -27,13 +34,21 @@ final class CaptureService {
     private var pickGeneration = 0
 
     func captureArea() async -> NSImage? {
-        guard ensureScreenRecordingPermission() else { return nil }
+        guard !isRecording, ensureScreenRecordingPermission() else { return nil }
         guard let selection = await selectArea() else { return nil }
         return await captureRect(selection.rect, displayID: selection.displayID)
     }
 
+    /// Start a GIF recording, or stop the one in progress (the hotkey toggles).
+    func recordGIF() async {
+        if isRecording { await finishRecording(); return }
+        guard !isPreparingRecording, !isCapturing, ensureScreenRecordingPermission() else { return }
+        guard let selection = await selectArea() else { return }
+        presentRecordingOptions(rect: selection.rect, displayID: selection.displayID)
+    }
+
     func captureFullScreen() async -> NSImage? {
-        guard ensureScreenRecordingPermission() else { return nil }
+        guard !isRecording, ensureScreenRecordingPermission() else { return nil }
         // The display the cursor is on — not always the primary.
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
@@ -43,7 +58,7 @@ final class CaptureService {
     }
 
     func captureWindow() async -> NSImage? {
-        guard ensureScreenRecordingPermission() else { return nil }
+        guard !isRecording, ensureScreenRecordingPermission() else { return nil }
         guard let windowID = await pickWindow() else { return nil }
         return await captureWindow(windowID: windowID)
     }
@@ -349,6 +364,170 @@ final class CaptureService {
     /// shared preferences via the app delegate, matching how the editor reads them.
     private static var includeCursorPreference: Bool {
         (NSApp.delegate as? AppDelegate)?.preferences.includeCursor ?? false
+    }
+
+    // MARK: - GIF recording
+
+    /// After the region is chosen, draw a persistent outline and show the quality
+    /// options panel; recording begins only when the user clicks Record.
+    private func presentRecordingOptions(rect: CGRect, displayID: CGDirectDisplayID) {
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) ?? NSScreen.main else { return }
+        isPreparingRecording = true
+
+        // Region is display-local top-left points → global AppKit (bottom-left).
+        let global = CGRect(x: screen.frame.minX + rect.minX,
+                            y: screen.frame.minY + (screen.frame.height - rect.minY - rect.height),
+                            width: rect.width, height: rect.height)
+        let outline = RegionOutlineWindow(globalRect: global)
+        outline.show()
+        regionOutline = outline
+
+        let panel = RecordingPanelController()
+        recordingPanel = panel
+        let quality = (NSApp.delegate as? AppDelegate)?.preferences.gifQuality ?? 0.7
+        panel.showOptions(
+            on: screen,
+            regionPoints: CGSize(width: rect.width, height: rect.height),
+            retinaScale: screen.backingScaleFactor,
+            quality: quality,
+            onRecord: { [weak self] q in
+                Task { @MainActor in await self?.beginRecording(rect: rect, displayID: displayID, quality: q) }
+            },
+            onCancel: { [weak self] in self?.cancelPreparing() }
+        )
+    }
+
+    private func cancelPreparing() {
+        isPreparingRecording = false
+        recordingPanel?.hide(); recordingPanel = nil
+        regionOutline?.hide(); regionOutline = nil
+    }
+
+    private func beginRecording(rect: CGRect, displayID: CGDirectDisplayID, quality: Double) async {
+        guard isPreparingRecording else { return }   // ignore a double Record click
+        guard let displays = try? await SCShareableContent
+                .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays,
+              let display = Self.resolveDisplay(id: displayID, in: displays) else {
+            cancelPreparing(); return
+        }
+        isPreparingRecording = false
+        isRecording = true
+
+        // Remember the choice for next time.
+        (NSApp.delegate as? AppDelegate)?.preferences.gifQuality = quality
+
+        let retina = (NSScreen.screens.first { $0.displayID == displayID } ?? NSScreen.main)?.backingScaleFactor ?? 2
+        let px = GIFQuality.pixelSize(regionPoints: CGSize(width: rect.width, height: rect.height),
+                                      quality: quality, retinaScale: retina)
+
+        // Exclude all Snapture windows (the panel + outline) from the capture.
+        let myPID = pid_t(ProcessInfo.processInfo.processIdentifier)
+        let myWindows = (try? await SCShareableContent
+            .excludingDesktopWindows(false, onScreenWindowsOnly: true))?
+            .windows.filter { $0.owningApplication?.processID == myPID } ?? []
+        let filter = SCContentFilter(display: display, excludingWindows: myWindows)
+
+        let config = SCStreamConfiguration()
+        config.sourceRect = rect
+        config.width = Int(px.width)
+        config.height = Int(px.height)
+        config.scalesToFit = true
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(GIFQuality.fps(quality)))
+        config.queueDepth = 6
+        config.showsCursor = true
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+
+        let recorder = GIFRecorder()
+        recorder.onReachCap = { [weak self] in
+            Task { @MainActor in await self?.finishRecording() }
+        }
+        self.recorder = recorder
+
+        do {
+            try await recorder.start(filter: filter, configuration: config)
+            // Timer starts aligned with the actual capture.
+            recordingPanel?.switchToRecording(startedAt: Date()) { [weak self] in
+                Task { @MainActor in await self?.finishRecording() }
+            }
+        } catch {
+            NSLog("Snapture: GIF recording failed to start: \(error)")
+            recordingPanel?.hide(); recordingPanel = nil
+            regionOutline?.hide(); regionOutline = nil
+            self.recorder = nil
+            isRecording = false
+            presentRecordingAlert(title: "Couldn’t start recording", message: error.localizedDescription)
+        }
+    }
+
+    private func finishRecording() async {
+        guard isRecording, let recorder else { return }
+        isRecording = false
+        // Swap the Stop button for a processing indicator and drop the outline;
+        // encoding a long recording takes a moment and shouldn't look frozen.
+        regionOutline?.hide(); regionOutline = nil
+        recordingPanel?.switchToProcessing()
+
+        let frames = await recorder.stop()
+        self.recorder = nil
+
+        guard frames.count >= 2 else {
+            recordingPanel?.hide(); recordingPanel = nil
+            presentRecordingAlert(title: "Recording too short",
+                                  message: "Record for at least a second to make a GIF.")
+            return
+        }
+
+        // Encode off the main thread so the spinner keeps animating.
+        let data: Data? = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: GIFEncoder.encode(frames: frames))
+            }
+        }
+
+        // Dismiss the processing indicator, then present the save dialog.
+        recordingPanel?.hide(); recordingPanel = nil
+
+        guard let data else {
+            presentRecordingAlert(title: "Couldn’t create GIF", message: "Encoding failed.")
+            return
+        }
+        saveGIF(data)
+    }
+
+    private func saveGIF(_ data: Data) {
+        // Always leave it on the clipboard so it's never lost, then offer to save.
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setData(data, forType: NSPasteboard.PasteboardType("com.compuserve.gif"))
+
+        let panel = NSSavePanel()
+        panel.title = "Save GIF"
+        panel.allowedContentTypes = [.gif]
+        panel.nameFieldStringValue = "Snapture-\(Self.fileTimestamp()).gif"
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try data.write(to: url)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            presentRecordingAlert(title: "Save failed", message: error.localizedDescription)
+        }
+    }
+
+    private func presentRecordingAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private static func fileTimestamp() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return f.string(from: Date())
     }
 }
 

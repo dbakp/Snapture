@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             onCaptureWindow: { [weak self] in self?.captureWindow() },
             onCaptureFullScreen: { [weak self] in self?.captureFullScreen() },
             onCaptureAreaDelayed: { [weak self] in self?.captureAreaAfterDelay(seconds: 3) },
+            onRecordGIF: { [weak self] in self?.recordGIF() },
             onPreferences: { [weak self] in
                 guard let self else { return }
                 SettingsWindowController.shared.show(preferences: self.preferences)
@@ -47,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // so a Carbon hotkey there would register but never fire.
         hotKey.register(keyCode: UInt32(kVK_ANSI_3), modifiers: [.control, .command]) { [weak self] in
             self?.captureFullScreen()
+        }
+        // ⌥⌘G for GIF — ⌃⌘G is commonly claimed by window managers.
+        hotKey.register(keyCode: UInt32(kVK_ANSI_G), modifiers: [.option, .command]) { [weak self] in
+            self?.recordGIF()
         }
 
         if !OnboardingWindowController.hasCompleted {
@@ -89,6 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         windows.openEditor(with: image)
     }
 
+    private func recordGIF() {
+        Task { @MainActor in await CaptureService.shared.recordGIF() }
+    }
+
     private func captureAreaAfterDelay(seconds: UInt64) {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
@@ -101,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 private let kVK_ANSI_1: Int = 0x12
 private let kVK_ANSI_2: Int = 0x13
 private let kVK_ANSI_3: Int = 0x14
+private let kVK_ANSI_G: Int = 0x05
 
 /// Plays the system screenshot shutter sound, best-effort. The authentic sound
 /// ships inside CoreAudio; if it's ever absent we fall back to a stock alert

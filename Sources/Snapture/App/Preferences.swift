@@ -8,6 +8,9 @@ final class Preferences: ObservableObject {
     @AppStorage("playSoundOnCapture") var playSoundOnCapture: Bool = true
     @AppStorage("includeCursor") var includeCursor: Bool = false
 
+    /// Last-used GIF quality (0…1): trades resolution + fps against file size.
+    @AppStorage("gifQuality") var gifQuality: Double = 0.7
+
     // Default look of a freshly captured screenshot
     @AppStorage("defaultBackground") var defaultBackground: String = "gradient.indigo"
     @AppStorage("defaultFrameStyle") var defaultFrameStyle: String = "none"

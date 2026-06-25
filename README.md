@@ -36,6 +36,12 @@ You only do this once. On first capture, macOS asks for **Screen Recording** per
 - 3-second delayed capture from the menu bar
 - Fully multi-monitor aware
 
+### Record GIFs
+- **`⌥⌘G`** — drag a region, then record it as an animated GIF
+- A quality slider (resolution + frame rate) with a **live size estimate** for your selection
+- A **persistent outline** stays around the recording area so you always see what's captured
+- Press **Stop** (or `⌥⌘G` again) — record as long as you like; the result is saved and copied to the clipboard
+
 ### Compose
 - Background presets (gradients + solids) or a custom color
 - **Window-chrome framing** — wrap the shot in a macOS titlebar or browser chrome (traffic lights + URL bar) for clean product mockups
@@ -64,6 +70,7 @@ You only do this once. On first capture, macOS asks for **Screen Recording** per
 | | |
 |---|---|
 | Capture area / window / full screen | `⌘⇧2` · `⌘⇧1` · `⌃⌘3` |
+| Record GIF | `⌥⌘G` |
 | Tools | Select `V` · Crop `C` · Rectangle `R` · Ellipse `O` · Triangle `Y` · Line `L` · Arrow `A` · Pen `P` · Text `T` · Step badge `N` · Magnifier `M` · Blur `B` · Highlight `H` |
 | Paste image as layer | `⌘V` |
 | Z-order | forward `⌘]` · backward `⌘[` · front `⌘⇧A` · back `⌘⇧B` |
@@ -128,7 +135,6 @@ The same `CompositionView` powers both the live editor and the exported image, s
 
 ## Roadmap
 
-- Screen recording → MP4 / GIF
 - Scrolling capture
 - Capture-history browser in the menu
 - Pin a screenshot as a floating always-on-top window

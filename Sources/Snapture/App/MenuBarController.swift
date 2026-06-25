@@ -8,6 +8,7 @@ final class MenuBarController {
     private let onCaptureWindow: () -> Void
     private let onCaptureFullScreen: () -> Void
     private let onCaptureAreaDelayed: () -> Void
+    private let onRecordGIF: () -> Void
     private let onPreferences: () -> Void
     private let onShowWelcome: () -> Void
     private let onQuit: () -> Void
@@ -17,6 +18,7 @@ final class MenuBarController {
         onCaptureWindow: @escaping () -> Void,
         onCaptureFullScreen: @escaping () -> Void,
         onCaptureAreaDelayed: @escaping () -> Void,
+        onRecordGIF: @escaping () -> Void,
         onPreferences: @escaping () -> Void,
         onShowWelcome: @escaping () -> Void,
         onQuit: @escaping () -> Void
@@ -25,6 +27,7 @@ final class MenuBarController {
         self.onCaptureWindow = onCaptureWindow
         self.onCaptureFullScreen = onCaptureFullScreen
         self.onCaptureAreaDelayed = onCaptureAreaDelayed
+        self.onRecordGIF = onRecordGIF
         self.onPreferences = onPreferences
         self.onShowWelcome = onShowWelcome
         self.onQuit = onQuit
@@ -50,6 +53,8 @@ final class MenuBarController {
         menu.addItem(makeItem(title: "Capture Full Screen", shortcut: "3", modifiers: [.command, .control], action: #selector(captureFullScreen)))
         menu.addItem(makeItem(title: "Capture Area in 3 Seconds", shortcut: "", modifiers: [], action: #selector(captureAreaDelayed)))
         menu.addItem(.separator())
+        menu.addItem(makeItem(title: "Record GIF", shortcut: "g", modifiers: [.option, .command], action: #selector(recordGIF)))
+        menu.addItem(.separator())
         menu.addItem(makeItem(title: "Preferences…", shortcut: ",", modifiers: [.command], action: #selector(openPreferences)))
         menu.addItem(makeItem(title: "Welcome Guide", shortcut: "", modifiers: [], action: #selector(showWelcome)))
         menu.addItem(.separator())
@@ -68,6 +73,7 @@ final class MenuBarController {
     @objc private func captureWindow() { onCaptureWindow() }
     @objc private func captureFullScreen() { onCaptureFullScreen() }
     @objc private func captureAreaDelayed() { onCaptureAreaDelayed() }
+    @objc private func recordGIF() { onRecordGIF() }
     @objc private func openPreferences() { onPreferences() }
     @objc private func showWelcome() { onShowWelcome() }
     @objc private func quit() { onQuit() }
