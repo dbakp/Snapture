@@ -13,7 +13,7 @@ final class RegionOutlineWindow {
     init(globalRect: NSRect) {
         // Sit just outside the region so the border doesn't cover recorded content.
         let frame = globalRect.insetBy(dx: -2, dy: -2)
-        window = OverlayWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window = OverlayWindow(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         window.setFrame(frame, display: false)
         window.isOpaque = false
         window.backgroundColor = .clear
@@ -79,7 +79,7 @@ final class RecordingPanelController {
 
         let win = window ?? {
             let w = OverlayWindow(contentRect: NSRect(origin: .zero, size: size),
-                                  styleMask: [.borderless], backing: .buffered, defer: false)
+                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             w.isOpaque = false
             w.backgroundColor = .clear
             w.hasShadow = true
@@ -92,8 +92,10 @@ final class RecordingPanelController {
         let vis = screen.visibleFrame
         win.setFrameOrigin(NSPoint(x: vis.midX - size.width / 2, y: vis.maxY - size.height - 16))
         if makeKey {
-            NSApp.activate(ignoringOtherApps: true)
+            // Non-activating: Return/Escape work in the options panel without
+            // raising Snapture's windows over the region being recorded.
             win.makeKeyAndOrderFront(nil)
+            win.orderFrontRegardless()
         } else {
             win.orderFrontRegardless()
         }

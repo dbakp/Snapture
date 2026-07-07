@@ -41,7 +41,7 @@ final class WindowPickOverlay {
 
         window = OverlayWindow(
             contentRect: screen.frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -69,9 +69,8 @@ final class WindowPickOverlay {
     }
 
     func present() {
-        // Activate so the overlay can actually hold key status — a background
-        // accessory app's window won't otherwise receive keyDown (Escape).
-        NSApp.activate(ignoringOtherApps: true)
+        // Non-activating panel: takes key status (Escape works) without raising
+        // Snapture's own windows over the ones the user is picking from.
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeFirstResponder(view)

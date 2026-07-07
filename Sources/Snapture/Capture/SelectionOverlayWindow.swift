@@ -23,7 +23,7 @@ final class SelectionOverlayWindow {
 
         self.window = OverlayWindow(
             contentRect: screen.frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -51,7 +51,9 @@ final class SelectionOverlayWindow {
     }
 
     func present() {
-        NSApp.activate(ignoringOtherApps: true)
+        // No NSApp.activate here: the panel is non-activating, so it takes key
+        // status (Escape works) without raising Snapture's own windows above
+        // the content the user is capturing.
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeFirstResponder(view)
