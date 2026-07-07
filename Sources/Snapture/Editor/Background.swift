@@ -9,7 +9,10 @@ enum BackgroundStyle: Equatable, Hashable {
     func view() -> some View {
         switch self {
         case .transparent:
-            CheckerboardPattern()
+            // Truly clear — the export must have real alpha here. The editor
+            // draws its checkerboard "no background" hint BEHIND the
+            // composition (see EditorCanvas), never inside it.
+            Color.clear
         case .solid(let c):
             c.swiftUI
         case .gradient(let a, let b, let angle):

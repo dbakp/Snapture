@@ -84,6 +84,13 @@ struct BackgroundPickerView: View {
                         state.background = preset.style
                     } label: {
                         ZStack {
+                            // The transparent style renders as Color.clear now,
+                            // so the "None" swatch shows the checkerboard itself.
+                            if preset.style == .transparent {
+                                CheckerboardPattern()
+                                    .frame(width: 56, height: 40)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
                             preset.style.view()
                                 .frame(width: 56, height: 40)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))

@@ -52,6 +52,17 @@ struct EditorCanvas: View {
             let layout = computeLayout(in: geo.size)
             ZStack(alignment: .topLeading) {
                 Color.clear
+                // Editor-only "no background" hint: the checkerboard sits BEHIND
+                // the composition so it never appears in the exported image —
+                // a transparent background exports with real alpha.
+                if state.background == .transparent {
+                    CheckerboardPattern()
+                        .frame(width: layout.canvasSize.width * layout.displayScale,
+                               height: layout.canvasSize.height * layout.displayScale)
+                        .offset(x: layout.canvasOrigin.x, y: layout.canvasOrigin.y)
+                        .allowsHitTesting(false)
+                }
+
                 // Rendered at native size, then scaled to fit. The export renders
                 // the same view at displayScale = 1 → pixel-identical output.
                 CompositionView(state: state, layout: layout, hiddenAnnotationID: editingTextID)

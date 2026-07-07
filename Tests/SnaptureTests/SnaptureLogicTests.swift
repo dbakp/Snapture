@@ -302,8 +302,43 @@ final class SnaptureLogicTests: XCTestCase {
         XCTAssertEqual(bbox.height, 150 * s, accuracy: 8 * s)
     }
 
-    /// Every annotation kind must compose without crashing and yield the right
-    /// canvas dimensions (smoke test for the whole export path post-refactor).
+    /// Alpha of the pixel at (xFrac, yFrac) of the image, 0…255.
+    private func alphaAt(_ cg: CGImage, xFrac: CGFloat, yFrac: CGFloat) -> UInt8 {
+        let w = cg.width, h = cg.height
+        var buf = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &buf, width: w, height: h, bitsPerComponent: 8,
+                                  bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return 255 }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let x = min(w - 1, max(0, Int(CGFloat(w) * xFrac)))
+        let y = min(h - 1, max(0, Int(CGFloat(h) * yFrac)))
+        return buf[(y * w + x) * 4 + 3]
+    }
+
+    /// A "None" background must export with REAL transparency — the editor's
+    /// checkerboard is a display hint and must never be baked into the image.
+    func testTransparentBackgroundExportsRealAlpha() {
+        let state = makeState(imageWidth: 200, imageHeight: 150)
+        state.background = .transparent
+        state.padding = 30
+        state.shadowEnabled = false
+
+        let out = ImageComposer.compose(state: state)
+        guard let cg = out.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return XCTFail("compose produced no CGImage")
+        }
+        // Sample inside the padding band — must be fully transparent.
+        XCTAssertLessThanOrEqual(alphaAt(cg, xFrac: 0.02, yFrac: 0.02), 2)
+
+        // Sanity: a solid background is opaque at the same spot.
+        state.background = .solid(CodableColor(.white))
+        let out2 = ImageComposer.compose(state: state)
+        guard let cg2 = out2.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return XCTFail("compose produced no CGImage")
+        }
+        XCTAssertGreaterThanOrEqual(alphaAt(cg2, xFrac: 0.02, yFrac: 0.02), 253)
+    }
+
     // MARK: - GIF encoding
 
     private func solidFrame(_ color: NSColor, at t: Double, size: Int = 24) -> GIFRecorder.Frame {
@@ -349,6 +384,8 @@ final class SnaptureLogicTests: XCTestCase {
         XCTAssertLessThanOrEqual(max(huge.width, huge.height), GIFQuality.longestEdgeCap)
     }
 
+    /// Every annotation kind must compose without crashing and yield the right
+    /// canvas dimensions (smoke test for the whole export path post-refactor).
     func testComposeHandlesAllAnnotationKinds() {
         let state = makeState(imageWidth: 600, imageHeight: 400)
         var anns: [Annotation] = []
