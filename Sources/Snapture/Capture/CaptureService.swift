@@ -23,6 +23,13 @@ final class CaptureService {
     private var recordingPanel: RecordingPanelController?
     private var regionOutline: RegionOutlineWindow?
 
+    // Display cache — SCShareableContent's first fetch after launch takes multiple
+    // seconds (ScreenCaptureKit daemon spin-up + full content enumeration), which
+    // would otherwise stall the user's first capture. warmUp() fills this at launch
+    // in the background; screen-parameter changes refresh it.
+    private var cachedDisplays: [SCDisplay] = []
+    private var screenObserver: NSObjectProtocol?
+
     // Per-pick-session preview state for the window picker.
     private var pickWindowsByID: [CGWindowID: SCWindow] = [:]
     private var previewCache: [CGWindowID: NSImage] = [:]
@@ -61,6 +68,57 @@ final class CaptureService {
         guard !isRecording, ensureScreenRecordingPermission() else { return nil }
         guard let windowID = await pickWindow() else { return nil }
         return await captureWindow(windowID: windowID)
+    }
+
+    // MARK: - Warm-up & display cache
+
+    /// Pre-fetches shareable content and exercises the screenshot pipeline once,
+    /// in the background, so the multi-second cost of ScreenCaptureKit's first
+    /// use lands at launch instead of on the user's first capture.
+    ///
+    /// Safe to call repeatedly. Does nothing when Screen Recording isn't granted
+    /// yet — warming up must never be what triggers the permission prompt.
+    func warmUp() {
+        guard CGPreflightScreenCaptureAccess() else { return }
+        if screenObserver == nil {
+            screenObserver = NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification,
+                object: nil, queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    CaptureService.shared.cachedDisplays = []
+                    await CaptureService.shared.refreshDisplays()
+                }
+            }
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.refreshDisplays()
+            // One 2×2px probe so the first real capture pays no pipeline
+            // spin-up either. Never leaves memory.
+            if let display = self.cachedDisplays.first {
+                let config = SCStreamConfiguration()
+                config.width = 2
+                config.height = 2
+                config.sourceRect = CGRect(x: 0, y: 0, width: 2, height: 2)
+                config.showsCursor = false
+                let filter = SCContentFilter(display: display, excludingWindows: [])
+                _ = try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            }
+        }
+    }
+
+    @discardableResult
+    private func refreshDisplays() async -> [SCDisplay] {
+        let displays = (try? await SCShareableContent
+            .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays) ?? []
+        if !displays.isEmpty { cachedDisplays = displays }
+        return displays
+    }
+
+    /// Cached displays when available, otherwise a fresh fetch.
+    private func currentDisplays() async -> [SCDisplay] {
+        cachedDisplays.isEmpty ? await refreshDisplays() : cachedDisplays
     }
 
     // MARK: - Permission
@@ -315,9 +373,13 @@ final class CaptureService {
     // MARK: - Screenshot
 
     private func captureRect(_ rect: CGRect, displayID: CGDirectDisplayID) async -> NSImage? {
-        guard let displays = try? await SCShareableContent
-                .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays,
-              let display = Self.resolveDisplay(id: displayID, in: displays) else {
+        var displays = await currentDisplays()
+        // The cache can be stale if a monitor was just (un)plugged — refetch once.
+        if Self.resolveDisplay(id: displayID, in: displays) == nil {
+            cachedDisplays = []
+            displays = await refreshDisplays()
+        }
+        guard let display = Self.resolveDisplay(id: displayID, in: displays) else {
             NSLog("Snapture: could not resolve SCDisplay for id \(displayID)")
             return nil
         }

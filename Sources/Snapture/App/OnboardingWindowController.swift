@@ -133,7 +133,13 @@ struct OnboardingView: View {
         }
         .frame(width: 520, height: 620)
         .onReceive(permissionPoll) { _ in
-            permissionGranted = CGPreflightScreenCaptureAccess()
+            let granted = CGPreflightScreenCaptureAccess()
+            if granted && !permissionGranted {
+                // Permission just arrived — pre-warm ScreenCaptureKit now so the
+                // very first capture doesn't pay its multi-second spin-up.
+                CaptureService.shared.warmUp()
+            }
+            permissionGranted = granted
         }
     }
 

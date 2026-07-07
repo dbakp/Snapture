@@ -57,6 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if !OnboardingWindowController.hasCompleted {
             OnboardingWindowController.shared.show()
         }
+
+        // Spin up ScreenCaptureKit in the background — its first use after
+        // launch takes seconds and must not land on the user's first capture.
+        CaptureService.shared.warmUp()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
