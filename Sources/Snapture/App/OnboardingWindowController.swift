@@ -129,7 +129,11 @@ struct OnboardingView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 8)
-                .padding(.bottom, 28)
+                .padding(.bottom, 14)
+            Text(AppInfo.display)
+                .font(.caption2)
+                .foregroundStyle(.quaternary)
+                .padding(.bottom, 12)
         }
         .frame(width: 520, height: 620)
         .onReceive(permissionPoll) { _ in

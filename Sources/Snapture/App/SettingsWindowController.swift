@@ -21,6 +21,7 @@ final class SettingsWindowController {
             )
             w.title = "Snapture Settings"
             w.contentView = host
+            w.setContentSize(host.fittingSize)   // fit the tabs + version footer
             w.isReleasedWhenClosed = false
             w.center()
             window = w

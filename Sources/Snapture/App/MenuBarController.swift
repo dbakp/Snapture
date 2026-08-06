@@ -57,6 +57,7 @@ final class MenuBarController {
         menu.addItem(.separator())
         menu.addItem(makeItem(title: "Preferences…", shortcut: ",", modifiers: [.command], action: #selector(openPreferences)))
         menu.addItem(makeItem(title: "Welcome Guide", shortcut: "", modifiers: [], action: #selector(showWelcome)))
+        menu.addItem(makeItem(title: "About Snapture", shortcut: "", modifiers: [], action: #selector(showAbout)))
         menu.addItem(.separator())
         menu.addItem(makeItem(title: "Quit Snapture", shortcut: "q", modifiers: [.command], action: #selector(quit)))
         statusItem.menu = menu
@@ -76,5 +77,13 @@ final class MenuBarController {
     @objc private func recordGIF() { onRecordGIF() }
     @objc private func openPreferences() { onPreferences() }
     @objc private func showWelcome() { onShowWelcome() }
+
+    @objc private func showAbout() {
+        // Standard About panel: icon, name, "Version x.y.z (n)" and copyright,
+        // all read from the bundle. Accessory apps must activate first or the
+        // panel appears behind other windows.
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
     @objc private func quit() { onQuit() }
 }

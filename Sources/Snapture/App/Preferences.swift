@@ -21,11 +21,19 @@ final class Preferences: ObservableObject {
 
 struct SettingsView: View {
     var body: some View {
-        TabView {
-            CaptureSettingsTab()
-                .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
-            AppearanceSettingsTab()
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+        VStack(spacing: 0) {
+            TabView {
+                CaptureSettingsTab()
+                    .tabItem { Label("Capture", systemImage: "camera.viewfinder") }
+                AppearanceSettingsTab()
+                    .tabItem { Label("Appearance", systemImage: "paintpalette") }
+            }
+
+            Text(AppInfo.display)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 6)
+                .padding(.bottom, 10)
         }
         .frame(width: 500)
     }
