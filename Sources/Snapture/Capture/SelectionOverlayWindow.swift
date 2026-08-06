@@ -1,5 +1,6 @@
 import AppKit
 import ScreenCaptureKit
+import Carbon.HIToolbox
 
 @MainActor
 final class SelectionOverlayWindow {
@@ -54,6 +55,15 @@ final class SelectionOverlayWindow {
         // No NSApp.activate here: the panel is non-activating, so it takes key
         // status (Escape works) without raising Snapture's own windows above
         // the content the user is capturing.
+        //
+        // Exception: while some process holds Secure Keyboard Entry, no other
+        // app's panel may become key — Escape would silently die. Activating is
+        // the lesser evil in that rare state (clicks work either way, thanks to
+        // acceptsFirstMouse).
+        if IsSecureEventInputEnabled() {
+            NSLog("Snapture: Secure Keyboard Entry is active; activating so keyboard cancel works")
+            NSApp.activate(ignoringOtherApps: true)
+        }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeFirstResponder(view)
@@ -89,6 +99,13 @@ final class SelectionOverlayView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
+
+    // Deliver the first click even when the panel couldn't become key. Without
+    // this, AppKit swallows clicks on a non-key window — and the panel CAN fail
+    // to become key when another process holds Secure Keyboard Entry (Terminal's
+    // option, password fields, or macOS's stuck-loginwindow bug), leaving the
+    // overlay visible but impossible to drag on.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     // Deliver crosshair mouseMoved events on every screen's overlay, not just
     // the key window's (only one overlay can be key on multi-display setups).

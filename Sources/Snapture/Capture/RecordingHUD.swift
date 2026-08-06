@@ -1,5 +1,13 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
+
+/// Hosting view that accepts the first mouse click even when its window isn't
+/// key — the recording panel's Record/Stop buttons must stay clickable when
+/// Secure Keyboard Entry prevents the non-activating panel from becoming key.
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
 
 // MARK: - Region outline
 
@@ -72,7 +80,7 @@ final class RecordingPanelController {
     }
 
     private func present(_ view: AnyView, on screen: NSScreen, makeKey: Bool) {
-        let host = NSHostingView(rootView: view)
+        let host = FirstMouseHostingView(rootView: view)
         host.layoutSubtreeIfNeeded()
         var size = host.fittingSize
         if size.width < 60 || size.height < 30 { size = NSSize(width: 360, height: 130) }
@@ -94,6 +102,12 @@ final class RecordingPanelController {
         if makeKey {
             // Non-activating: Return/Escape work in the options panel without
             // raising Snapture's windows over the region being recorded.
+            // Secure Keyboard Entry blocks cross-app key status — activate in
+            // that rare state so the shortcuts still work (clicks work anyway).
+            if IsSecureEventInputEnabled() {
+                NSLog("Snapture: Secure Keyboard Entry is active; activating so keyboard shortcuts work")
+                NSApp.activate(ignoringOtherApps: true)
+            }
             win.makeKeyAndOrderFront(nil)
             win.orderFrontRegardless()
         } else {

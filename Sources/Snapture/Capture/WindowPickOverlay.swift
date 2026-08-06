@@ -1,5 +1,6 @@
 import AppKit
 import ScreenCaptureKit
+import Carbon.HIToolbox
 
 /// Lightweight, Sendable description of a window the user can pick.
 /// `frame` is in Quartz global coordinates (origin top-left of primary display).
@@ -71,6 +72,12 @@ final class WindowPickOverlay {
     func present() {
         // Non-activating panel: takes key status (Escape works) without raising
         // Snapture's own windows over the ones the user is picking from.
+        // Secure Keyboard Entry blocks cross-app key status entirely — activate
+        // in that rare state so Escape still reaches us (see SelectionOverlay).
+        if IsSecureEventInputEnabled() {
+            NSLog("Snapture: Secure Keyboard Entry is active; activating so keyboard cancel works")
+            NSApp.activate(ignoringOtherApps: true)
+        }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.makeFirstResponder(view)
@@ -112,6 +119,10 @@ final class WindowPickView: NSView {
     required init?(coder: NSCoder) { fatalError("unused") }
 
     override var acceptsFirstResponder: Bool { true }
+
+    // Deliver the pick click even when the panel couldn't become key (e.g. some
+    // process holds Secure Keyboard Entry). See SelectionOverlayView.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     /// Stash a captured thumbnail; repaint if it belongs to the window currently
     /// under the cursor so the placeholder swaps to real content instantly.
