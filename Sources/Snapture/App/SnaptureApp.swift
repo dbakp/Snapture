@@ -61,6 +61,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Spin up ScreenCaptureKit in the background — its first use after
         // launch takes seconds and must not land on the user's first capture.
         CaptureService.shared.warmUp()
+
+        // TEMPORARY perf instrumentation: SNAPTURE_DEBUG_CAPTURE=1 runs two
+        // timed full-screen captures (cold vs warm) and logs stage durations.
+        if ProcessInfo.processInfo.environment["SNAPTURE_DEBUG_CAPTURE"] != nil {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await self.timedDebugCapture(label: "COLD")
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                await self.timedDebugCapture(label: "WARM")
+            }
+        }
+    }
+
+    private func timedDebugCapture(label: String) async {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        guard let image = await CaptureService.shared.captureFullScreen() else {
+            NSLog("PERF[\(label)] capture returned nil"); return
+        }
+        let t1 = CFAbsoluteTimeGetCurrent()
+        NSLog("PERF[\(label)] capture=\(Int((t1 - t0) * 1000))ms size=\(Int(image.size.width))x\(Int(image.size.height))")
+        windows.openEditor(with: image)
+        let t2 = CFAbsoluteTimeGetCurrent()
+        NSLog("PERF[\(label)] openEditor(sync)=\(Int((t2 - t1) * 1000))ms")
+        // How long until the main run loop is idle again (first frame done)?
+        DispatchQueue.main.async {
+            let t3 = CFAbsoluteTimeGetCurrent()
+            NSLog("PERF[\(label)] runloop-idle-after-open=\(Int((t3 - t2) * 1000))ms")
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

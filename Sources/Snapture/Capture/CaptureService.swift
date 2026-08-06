@@ -28,7 +28,9 @@ final class CaptureService {
     // would otherwise stall the user's first capture. warmUp() fills this at launch
     // in the background; screen-parameter changes refresh it.
     private var cachedDisplays: [SCDisplay] = []
+    private var displaysFetchInFlight = false
     private var screenObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
 
     // Per-pick-session preview state for the window picker.
     private var pickWindowsByID: [CGWindowID: SCWindow] = [:]
@@ -91,6 +93,17 @@ final class CaptureService {
                 }
             }
         }
+        if wakeObserver == nil {
+            // Overnight sleep pages out the capture daemon and our caches go
+            // cold with it — re-warm on wake so the day's first capture is as
+            // fast as any other.
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil, queue: .main
+            ) { _ in
+                Task { @MainActor in CaptureService.shared.warmUp() }
+            }
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             await self.refreshDisplays()
@@ -110,10 +123,26 @@ final class CaptureService {
 
     @discardableResult
     private func refreshDisplays() async -> [SCDisplay] {
-        let displays = (try? await SCShareableContent
-            .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays) ?? []
-        if !displays.isEmpty { cachedDisplays = displays }
-        return displays
+        // Coalesce concurrent callers onto one fetch: if the user captures while
+        // the launch warm-up is still in flight, the capture must ride that
+        // fetch, not race it with a second one (which doubles the cold cost).
+        if displaysFetchInFlight {
+            while displaysFetchInFlight {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            return cachedDisplays
+        }
+        displaysFetchInFlight = true
+        defer { displaysFetchInFlight = false }
+        do {
+            let displays = try await SCShareableContent
+                .excludingDesktopWindows(false, onScreenWindowsOnly: true).displays
+            if !displays.isEmpty { cachedDisplays = displays }
+            return displays
+        } catch {
+            NSLog("Snapture: shareable-content fetch failed: \(error)")
+            return []
+        }
     }
 
     /// Cached displays when available, otherwise a fresh fetch.
@@ -336,6 +365,13 @@ final class CaptureService {
         guard !isCapturing else { return nil }
         isCapturing = true
         defer { isCapturing = false }
+
+        // Start fetching displays NOW, overlapping the seconds the user spends
+        // dragging the selection — by mouse-up the SCDisplay is usually ready
+        // even when the launch warm-up hadn't finished yet.
+        if cachedDisplays.isEmpty {
+            Task { @MainActor [weak self] in _ = await self?.refreshDisplays() }
+        }
 
         return await withCheckedContinuation { (continuation: CheckedContinuation<Selection?, Never>) in
             var didResume = false
